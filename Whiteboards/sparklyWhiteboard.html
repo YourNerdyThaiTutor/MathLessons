@@ -8,13 +8,25 @@
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background: #0a0a0a; font-family: system-ui, sans-serif; }
         canvas { position: absolute; top: 0; left: 0; }
+        /* Apply this to the body or your canvas containers */
+        canvas, body {
+            /* Prevents the 'magnifying glass' and text selection handles */
+            -webkit-user-select: none; 
+            user-select: none;
+
+            /* Prevents the 'copy/paste' callout menu from appearing on long-press */
+            -webkit-touch-callout: none;
+
+            /* Prevents the blue highlight 'tap-flicker' on buttons */
+            -webkit-tap-highlight-color: transparent;
+        }
         #gridCanvas { z-index: 1; pointer-events: none; opacity: 0.3; filter: invert(1); } /* Dark mode grid */
         #drawCanvas { z-index: 2; touch-action: none; cursor: none; }
         #tempCanvas { z-index: 3; pointer-events: none; }
         #glitterCanvas { z-index: 4; pointer-events: none; }
 
         #masterCursor { position: fixed; pointer-events: none; z-index: 9999; display: none; }
-        .lipstick-mode { width: 18px; height: 36px; transform: translate(-50%, -100%) rotate(-15deg); }
+        .lipstick-mode { width: 18px; height: 36px; transform: translate(20%, -10%) rotate(-15deg); }
         .lipstick-mode .bullet { width: 100%; height: 50%; border-radius: 10px 10px 2px 2px; clip-path: polygon(0% 25%, 100% 0%, 100% 100%, 0% 100%); background: #ff0077; box-shadow: inset -2px 0 5px rgba(255,255,255,0.5); }
         .lipstick-mode .case { width: 100%; height: 50%; background: linear-gradient(90deg, #444, #111, #444); border-radius: 0 0 4px 4px; }
         .stamp-mode { font-size: 35px; transform: translate(-50%, -50%); filter: drop-shadow(0 0 10px white); }

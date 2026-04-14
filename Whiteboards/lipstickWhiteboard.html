@@ -8,6 +8,18 @@
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background: #d8a2cb; font-family: system-ui, sans-serif; }
         canvas { position: absolute; top: 0; left: 0; }
+        /* Apply this to the body or your canvas containers */
+        canvas, body {
+            /* Prevents the 'magnifying glass' and text selection handles */
+            -webkit-user-select: none; 
+            user-select: none;
+
+            /* Prevents the 'copy/paste' callout menu from appearing on long-press */
+            -webkit-touch-callout: none;
+
+            /* Prevents the blue highlight 'tap-flicker' on buttons */
+            -webkit-tap-highlight-color: transparent;
+        }
         #gridCanvas { z-index: 1; pointer-events: none; opacity: 0.5; }
         #drawCanvas { z-index: 2; touch-action: none; cursor: crosshair; } /* Crosshair for shapes */
         #tempCanvas { z-index: 3; pointer-events: none; }
