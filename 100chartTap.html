@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Active Explorer: Tap to Count</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --primary: #4361ee;
+            --glow: #4cc9f0;
+            --correct: #2ecc71;
+            --wrong: #e74c3c;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            user-select: none;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 15px 0; }
+        
+        .count-btn {
+            border: 2px solid #e2e8f0;
+            background: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1.1rem;
+        }
+
+        .count-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        #goal-text {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin-top: 10px;
+        }
+
+        /* The Grid */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 8px;
+            background: white;
+            padding: 15px;
+            border-radius: 20px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f5f9;
+            border-radius: 10px;
+            color: #94a3b8;
+            font-weight: 700;
+            font-size: 1.2rem;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        /* Success State */
+        .cell.found {
+            background: white;
+            color: var(--correct);
+            border-color: var(--correct);
+            box-shadow: 0 0 15px rgba(46, 204, 113, 0.3);
+        }
+
+        /* The Glowing Edge for the CURRENT target */
+        .cell.target-glow {
+            border-color: var(--glow);
+            box-shadow: 0 0 20px var(--glow);
+            color: var(--primary);
+            background: white;
+            transform: scale(1.05);
+        }
+
+        /* Shake animation for mistakes */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        .shake { 
+            animation: shake 0.2s ease-in-out 2; 
+            border-color: var(--wrong) !important;
+            color: var(--wrong) !important;
+        }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <div id="goal-text">Find the next number!</div>
+    <div class="btn-group" id="intervals"></div>
+    <button onclick="resetGame()" style="background: none; border: 1px solid #ccc; border-radius: 5px; cursor: pointer;">Reset Chart</button>
+</div>
+
+<div class="chart-grid" id="grid"></div>
+
+<script>
+    const grid = document.getElementById('grid');
+    const intervalContainer = document.getElementById('intervals');
+    let selectedInterval = 2;
+    let nextTarget = 2;
+
+    // 1. Build Grid
+    for (let i = 1; i <= 100; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.id = `c-${i}`;
+        cell.innerText = i;
+        cell.onclick = () => handleTap(i);
+        grid.appendChild(cell);
+    }
+
+    // 2. Build Buttons
+    for (let i = 2; i <= 12; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'count-btn' + (i === 2 ? ' active' : '');
+        btn.innerText = i;
+        btn.onclick = () => changeInterval(i, btn);
+        intervalContainer.appendChild(btn);
+    }
+
+    function changeInterval(val, btn) {
+        selectedInterval = val;
+        document.querySelectorAll('.count-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        resetGame();
+    }
+
+    function resetGame() {
+        nextTarget = selectedInterval;
+        document.querySelectorAll('.cell').forEach(c => {
+            c.className = 'cell';
+        });
+        updateTargetGlow();
+    }
+
+    function updateTargetGlow() {
+        document.querySelectorAll('.cell').forEach(c => c.classList.remove('target-glow'));
+        const targetCell = document.getElementById(`c-${nextTarget}`);
+        if (targetCell) targetCell.classList.add('target-glow');
+        document.getElementById('goal-text').innerText = `Next number: ${nextTarget}`;
+    }
+
+    function handleTap(num) {
+        const cell = document.getElementById(`c-${num}`);
+        
+        if (num === nextTarget) {
+            // Success!
+            cell.classList.remove('target-glow');
+            cell.classList.add('found');
+            speak(num);
+            
+            nextTarget += selectedInterval;
+            
+            if (nextTarget > 100) {
+                document.getElementById('goal-text').innerText = "🎉 AMAZING! You reached 100!";
+            } else {
+                updateTargetGlow();
+            }
+        } else if (num % selectedInterval === 0 && num < nextTarget) {
+            // Already found, ignore
+        } else {
+            // Wrong number
+            cell.classList.add('shake');
+            setTimeout(() => cell.classList.remove('shake'), 400);
+        }
+    }
+
+    function speak(num) {
+        const utterance = new SpeechSynthesisUtterance(num.toString());
+        utterance.rate = 1.1;
+        utterance.pitch = 1.2;
+        window.speechSynthesis.cancel(); // Stop any current speech
+        window.speechSynthesis.speak(utterance);
+    }
+
+    updateTargetGlow();
+</script>
+
+</body>
+</html>

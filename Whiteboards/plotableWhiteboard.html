@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Ultimate Persistent Whiteboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #ffffff; font-family: system-ui, sans-serif; }
+        canvas { position: absolute; top: 0; left: 0; }
+        #gridCanvas { z-index: 1; pointer-events: none; }
+        #drawCanvas { z-index: 2; touch-action: none; cursor: crosshair; }
+        #tempCanvas { z-index: 3; pointer-events: none; }
+
+        /* Combined Settings Panel */
+        .settings-panel {
+            position: absolute; top: 15px; left: 15px; z-index: 100;
+            background: rgba(255,255,255,0.95); padding: 12px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 200px; border: 1px solid #ddd;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .setting-item { display: flex; flex-direction: column; gap: 2px; }
+        label { font-size: 0.65rem; font-weight: bold; color: #666; text-transform: uppercase; }
+        select, input[type=range] { width: 100%; cursor: pointer; }
+
+        /* Bottom Toolbar */
+        .toolbar {
+            position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+            display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+            background: white; border-radius: 50px; box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            z-index: 100; border: 1px solid #eee;
+        }
+        .tool-btn { 
+            width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; 
+            border-radius: 50%; cursor: pointer; font-size: 1.3rem; background: #f0f0f0; transition: 0.2s;
+        }
+        .tool-btn.active { background: #007AFF; color: white; transform: scale(1.1); }
+        .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+        .color-active { border-color: black !important; }
+        .btn-party { background: linear-gradient(45deg, #ff0077, #ff7700); color: white; border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="settings-panel">
+        <div class="setting-item">
+            <label>Grid Mode</label>
+            <select id="gridMode" onchange="updateGrid()">
+                <option value="center">4 Quadrants (+/-)</option>
+                <option value="corner">1st Quadrant (Pos)</option>
+                <option value="none">Grid Off</option>
+            </select>
+        </div>
+        <div class="setting-item">
+            <label>Zoom (Scale)</label>
+            <input type="range" id="gridScale" min="30" max="150" value="60" oninput="updateGrid()">
+        </div>
+        <div class="setting-item">
+            <label>Manual Shift X / Y</label>
+            <input type="range" id="xShift" min="-400" max="400" value="0" oninput="updateGrid()">
+            <input type="range" id="yShift" min="-400" max="400" value="0" oninput="updateGrid()">
+        </div>
+    </div>
+
+    <canvas id="gridCanvas"></canvas>
+    <canvas id="drawCanvas"></canvas>
+    <canvas id="tempCanvas"></canvas>
+
+    <div class="toolbar">
+        <div id="pen" class="tool-btn active" onclick="setTool('pen')">✏️</div>
+        <div id="rect" class="tool-btn" onclick="setTool('rect')">⬜</div>
+        <div id="circle" class="tool-btn" onclick="setTool('circle')">⭕</div>
+        <div id="line" class="tool-btn" onclick="setTool('line')">📏</div>
+        <div id="eraser" class="tool-btn" onclick="setTool('eraser')">🧽</div>
+        <div style="width:1px; height:25px; background:#ddd;"></div>
+        <div class="color-swatch color-active" style="background:#2c3e50" onclick="setColor('#2c3e50', this)"></div>
+        <div class="color-swatch" style="background:#e74c3c" onclick="setColor('#e74c3c', this)"></div>
+        <div class="color-swatch" style="background:#3498db" onclick="setColor('#3498db', this)"></div>
+        <button style="background:#eee; border:none; padding:8px 12px; border-radius:10px; cursor:pointer;" onclick="clearAll()">Clear</button>
+        <button class="btn-party" onclick="celebrate()">PARTY</button>
+    </div>
+
+    <script>
+        const dCanvas = document.getElementById('drawCanvas');
+        const dCtx = dCanvas.getContext('2d');
+        const gCanvas = document.getElementById('gridCanvas');
+        const gCtx = gCanvas.getContext('2d');
+        const tCanvas = document.getElementById('tempCanvas');
+        const tCtx = tCanvas.getContext('2d');
+
+        let isPointerDown = false;
+        let currentTool = 'pen';
+        let currentColor = '#2c3e50';
+        let startPos = null;
+        let origin = { x: 0, y: 0 };
+
+        function resize() {
+            dCanvas.width = gCanvas.width = tCanvas.width = window.innerWidth;
+            dCanvas.height = gCanvas.height = tCanvas.height = window.innerHeight;
+            updateGrid();
+            [dCtx, tCtx].forEach(ctx => { ctx.lineCap = 'round'; ctx.lineJoin = 'round'; });
+        }
+
+        function updateGrid() {
+            const mode = document.getElementById('gridMode').value;
+            const scale = parseInt(document.getElementById('gridScale').value);
+            const xS = parseInt(document.getElementById('xShift').value);
+            const yS = parseInt(document.getElementById('yShift').value);
+
+            gCtx.clearRect(0, 0, gCanvas.width, gCanvas.height);
+            if (mode === 'none') return;
+
+            if (mode === 'center') {
+                origin.x = (gCanvas.width / 2) + xS;
+                origin.y = (gCanvas.height / 2) + yS;
+            } else {
+                origin.x = 60 + xS;
+                origin.y = (gCanvas.height - 60) + yS;
+            }
+
+            gCtx.strokeStyle = '#e2e8f0'; gCtx.lineWidth = 1;
+            gCtx.font = "10px sans-serif"; gCtx.fillStyle = "#94a3b8";
+
+            for(let x = origin.x; x < gCanvas.width; x += scale) drawV(x, scale);
+            for(let x = origin.x - scale; x > 0; x -= scale) drawV(x, scale);
+            for(let y = origin.y; y < gCanvas.height; y += scale) drawH(y, scale);
+            for(let y = origin.y - scale; y > 0; y -= scale) drawH(y, scale);
+
+            gCtx.strokeStyle = '#64748b'; gCtx.lineWidth = 2;
+            gCtx.beginPath(); gCtx.moveTo(origin.x, 0); gCtx.lineTo(origin.x, gCanvas.height); gCtx.stroke();
+            gCtx.beginPath(); gCtx.moveTo(0, origin.y); gCtx.lineTo(gCanvas.width, origin.y); gCtx.stroke();
+        }
+
+        function drawV(x, s) { gCtx.beginPath(); gCtx.moveTo(x,0); gCtx.lineTo(x, gCanvas.height); gCtx.stroke(); let v = Math.round((x-origin.x)/s); if(v!==0) gCtx.fillText(v, x+4, origin.y+12); }
+        function drawH(y, s) { gCtx.beginPath(); gCtx.moveTo(0,y); gCtx.lineTo(gCanvas.width, y); gCtx.stroke(); let v = Math.round((origin.y-y)/s); if(v!==0) gCtx.fillText(v, origin.x+4, y-4); }
+
+        function getSnap(coord, isY = false) {
+            const s = parseInt(document.getElementById('gridScale').value);
+            const off = isY ? origin.y : origin.x;
+            return Math.round((coord - off) / s) * s + off;
+        }
+
+        function setTool(t) { currentTool = t; document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active')); document.getElementById(t).classList.add('active'); }
+        function setColor(c, el) { currentColor = c; document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('color-active')); el.classList.add('color-active'); if(currentTool==='eraser') setTool('pen'); }
+
+        function drawShape(ctx, tool, start, end) {
+            ctx.beginPath(); ctx.strokeStyle = currentColor; ctx.lineWidth = 3;
+            if (tool === 'rect') ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+            else if (tool === 'circle') { let rx = Math.abs(end.x-start.x), ry = Math.abs(end.y-start.y); ctx.ellipse(start.x, start.y, rx, ry, 0, 0, Math.PI*2); ctx.stroke(); }
+            else if (tool === 'line') { ctx.moveTo(start.x, start.y); ctx.lineTo(end.x, end.y); ctx.stroke(); }
+        }
+
+        dCanvas.addEventListener('pointerdown', (e) => {
+            isPointerDown = true;
+            const x = (currentTool === 'pen' || currentTool === 'eraser') ? e.clientX : getSnap(e.clientX);
+            const y = (currentTool === 'pen' || currentTool === 'eraser') ? e.clientY : getSnap(e.clientY, true);
+            startPos = { x, y };
+            if (currentTool === 'pen' || currentTool === 'eraser') { dCtx.beginPath(); dCtx.moveTo(x, y); }
+        });
+
+        dCanvas.addEventListener('pointermove', (e) => {
+            if (!isPointerDown) return;
+            if (currentTool === 'pen' || currentTool === 'eraser') {
+                dCtx.globalCompositeOperation = (currentTool === 'eraser') ? 'destination-out' : 'source-over';
+                dCtx.strokeStyle = currentColor; dCtx.lineWidth = (currentTool === 'eraser') ? 40 : 4;
+                dCtx.lineTo(e.clientX, e.clientY); dCtx.stroke(); dCtx.beginPath(); dCtx.moveTo(e.clientX, e.clientY);
+            } else {
+                tCtx.clearRect(0,0,tCanvas.width,tCanvas.height);
+                drawShape(tCtx, currentTool, startPos, {x: getSnap(e.clientX), y: getSnap(e.clientY, true)});
+            }
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            if (!isPointerDown) return;
+            if (currentTool !== 'pen' && currentTool !== 'eraser') {
+                drawShape(dCtx, currentTool, startPos, {x: getSnap(e.clientX), y: getSnap(e.clientY, true)});
+                tCtx.clearRect(0,0,tCanvas.width,tCanvas.height);
+            }
+            isPointerDown = false;
+        });
+
+        function celebrate() { confetti({ particleCount: 150, spread: 70, origin: { y: 0.7 } }); }
+        function clearAll() { dCtx.clearRect(0,0,dCanvas.width,dCanvas.height); }
+        window.addEventListener('resize', resize);
+        resize();
+    </script>
+</body>
+</html>

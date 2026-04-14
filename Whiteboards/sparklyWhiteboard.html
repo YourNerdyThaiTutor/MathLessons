@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Ultra-Sparkle Geometry Suite</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #0a0a0a; font-family: system-ui, sans-serif; }
+        canvas { position: absolute; top: 0; left: 0; }
+        #gridCanvas { z-index: 1; pointer-events: none; opacity: 0.3; filter: invert(1); } /* Dark mode grid */
+        #drawCanvas { z-index: 2; touch-action: none; cursor: none; }
+        #tempCanvas { z-index: 3; pointer-events: none; }
+        #glitterCanvas { z-index: 4; pointer-events: none; }
+
+        #masterCursor { position: fixed; pointer-events: none; z-index: 9999; display: none; }
+        .lipstick-mode { width: 18px; height: 36px; transform: translate(-50%, -100%) rotate(-15deg); }
+        .lipstick-mode .bullet { width: 100%; height: 50%; border-radius: 10px 10px 2px 2px; clip-path: polygon(0% 25%, 100% 0%, 100% 100%, 0% 100%); background: #ff0077; box-shadow: inset -2px 0 5px rgba(255,255,255,0.5); }
+        .lipstick-mode .case { width: 100%; height: 50%; background: linear-gradient(90deg, #444, #111, #444); border-radius: 0 0 4px 4px; }
+        .stamp-mode { font-size: 35px; transform: translate(-50%, -50%); filter: drop-shadow(0 0 10px white); }
+
+        .control-panel {
+            position: absolute; top: 15px; left: 15px; z-index: 100;
+            background: rgba(20, 20, 20, 0.8); backdrop-filter: blur(10px); color: white;
+            padding: 15px; border-radius: 15px; width: 210px; border: 1px solid #444;
+        }
+        label { font-size: 9px; font-weight: 900; letter-spacing: 1px; color: #aaa; text-transform: uppercase; }
+        input[type=range], select { width: 100%; accent-color: #ff0077; background: #222; color: white; border: none; margin-bottom: 8px; }
+
+        .toolbar {
+            position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+            display: flex; align-items: center; gap: 12px; padding: 12px 25px;
+            background: rgba(255,255,255,0.1); backdrop-filter: blur(15px);
+            border-radius: 50px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            z-index: 100; border: 1px solid rgba(255,255,255,0.2);
+        }
+        .tool-btn { width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; font-size: 1.3rem; background: rgba(255,255,255,0.1); color: white; transition: 0.2s; }
+        .tool-btn.active { background: #ff0077; transform: scale(1.2); box-shadow: 0 0 15px #ff0077; }
+        .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+        .color-active { border-color: #ffffff !important; transform: scale(1.3); }
+    </style>
+</head>
+<body>
+
+    <div id="masterCursor">
+        <div id="lipstickCursor" class="lipstick-mode"><div id="lipstickBullet" class="bullet"></div><div class="case"></div></div>
+        <div id="stampCursor" class="stamp-mode">⭐</div>
+    </div>
+
+    <div class="control-panel">
+        <label>Grid Mode</label>
+        <select id="gridMode" onchange="updateGrid()">
+            <option value="center">4 Quadrants</option>
+            <option value="corner">1st Quadrant</option>
+            <option value="none">Blank</option>
+        </select>
+        <label>Shift X / Y</label>
+        <input type="range" id="xShift" min="-400" max="400" value="0" oninput="updateGrid()">
+        <input type="range" id="yShift" min="-400" max="400" value="0" oninput="updateGrid()">
+        <label>Zoom</label>
+        <input type="range" id="gridScale" min="30" max="150" value="70" oninput="updateGrid()">
+        
+        <div id="stampArea" style="display:none;">
+            <label>Stamps</label>
+            <div style="display:flex; gap:5px; margin-top:5px;">
+                <div class="stamp-option" style="cursor:pointer" onclick="setStamp('⭐')">⭐</div>
+                <div class="stamp-option" style="cursor:pointer" onclick="setStamp('💎')">💎</div>
+                <div class="stamp-option" style="cursor:pointer" onclick="setStamp('✨')">✨</div>
+                <div class="stamp-option" style="cursor:pointer" onclick="setStamp('💅')">💅</div>
+            </div>
+        </div>
+    </div>
+
+    <canvas id="gridCanvas"></canvas>
+    <canvas id="drawCanvas"></canvas>
+    <canvas id="tempCanvas"></canvas>
+    <canvas id="glitterCanvas"></canvas>
+
+    <div class="toolbar">
+        <div id="pen" class="tool-btn active" onclick="setTool('pen')">💄</div>
+        <div id="stamp" class="tool-btn" onclick="setTool('stamp')">⭐</div>
+        <div id="rect" class="tool-btn" onclick="setTool('rect')">⬜</div>
+        <div id="circle" class="tool-btn" onclick="setTool('circle')">⭕</div>
+        <div id="eraser" class="tool-btn" onclick="setTool('eraser')">🧽</div>
+        <div class="color-swatch color-active" style="background:#ff0077" onclick="setColor('#ff0077', this)"></div>
+        <div class="color-swatch" style="background:#00f2ff" onclick="setColor('#00f2ff', this)"></div>
+        <div class="color-swatch" style="background:#ffffff" onclick="setColor('#ffffff', this)"></div>
+        <button style="background:none; border:none; color:white; font-weight:bold; cursor:pointer;" onclick="clearAll()">CLEAR</button>
+    </div>
+
+    <script>
+        const dCanvas = document.getElementById('drawCanvas');
+        const dCtx = dCanvas.getContext('2d');
+        const gCanvas = document.getElementById('gridCanvas');
+        const gCtx = gCanvas.getContext('2d');
+        const glitterCanvas = document.getElementById('glitterCanvas');
+        const glCtx = glitterCanvas.getContext('2d');
+        const masterCursor = document.getElementById('masterCursor');
+        const lipstickCursor = document.getElementById('lipstickCursor');
+        const stampCursor = document.getElementById('stampCursor');
+        const bullet = document.getElementById('lipstickBullet');
+
+        let isPointerDown = false, currentTool = 'pen', currentColor = '#ff0077', activeStamp = '⭐';
+        let origin = { x: 0, y: 0 }, particles = [], lastPos = {x:0, y:0};
+
+        function resize() {
+            dCanvas.width = gCanvas.width = glitterCanvas.width = window.innerWidth;
+            dCanvas.height = gCanvas.height = glitterCanvas.height = window.innerHeight;
+            updateGrid();
+            dCtx.lineCap = 'round'; dCtx.lineJoin = 'round';
+        }
+
+        function updateGrid() {
+            const mode = document.getElementById('gridMode').value;
+            const scale = parseInt(document.getElementById('gridScale').value);
+            gCtx.clearRect(0, 0, gCanvas.width, gCanvas.height);
+            if (mode === 'none') return;
+            origin.x = (mode === 'center' ? gCanvas.width/2 : 60) + parseInt(document.getElementById('xShift').value);
+            origin.y = (mode === 'center' ? gCanvas.height/2 : gCanvas.height-60) + parseInt(document.getElementById('yShift').value);
+            gCtx.strokeStyle = '#333'; gCtx.lineWidth = 1;
+            for(let x = origin.x; x < gCanvas.width; x += scale) gCtx.strokeRect(x, 0, 0.1, gCanvas.height);
+            for(let x = origin.x - scale; x > 0; x -= scale) gCtx.strokeRect(x, 0, 0.1, gCanvas.height);
+            for(let y = origin.y; y < gCanvas.height; y += scale) gCtx.strokeRect(0, y, gCanvas.width, 0.1);
+            for(let y = origin.y - scale; y > 0; y -= scale) gCtx.strokeRect(0, y, gCanvas.width, 0.1);
+            gCtx.strokeStyle = '#ff0077'; gCtx.lineWidth = 2;
+            gCtx.beginPath(); gCtx.moveTo(origin.x, 0); gCtx.lineTo(origin.x, gCanvas.height); gCtx.stroke();
+            gCtx.beginPath(); gCtx.moveTo(0, origin.y); gCtx.lineTo(gCanvas.width, origin.y); gCtx.stroke();
+        }
+
+        function getSnap(coord, isY = false) {
+            const s = parseInt(document.getElementById('gridScale').value);
+            const off = isY ? origin.y : origin.x;
+            return Math.round((coord - off) / s) * s + off;
+        }
+
+        function setTool(t) { 
+            currentTool = t; 
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(t).classList.add('active');
+            document.getElementById('stampArea').style.display = (t === 'stamp') ? 'block' : 'none';
+            dCanvas.style.cursor = (t === 'pen' || t === 'stamp') ? 'none' : 'crosshair';
+            masterCursor.style.display = (t === 'pen' || t === 'stamp') ? 'block' : 'none';
+            lipstickCursor.style.display = (t === 'pen') ? 'block' : 'none';
+            stampCursor.style.display = (t === 'stamp') ? 'block' : 'none';
+        }
+
+        function setStamp(s) { activeStamp = s; stampCursor.innerText = s; }
+        function setColor(c, el) { 
+            currentColor = c; bullet.style.background = c;
+            document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('color-active'));
+            el.classList.add('color-active');
+        }
+
+        window.addEventListener('pointermove', (e) => {
+            const px = e.clientX, py = e.clientY;
+            if(currentTool === 'stamp') {
+                masterCursor.style.left = getSnap(px) + 'px'; masterCursor.style.top = getSnap(py, true) + 'px';
+            } else {
+                masterCursor.style.left = px + 'px'; masterCursor.style.top = py + 'px';
+            }
+            if (!isPointerDown) return;
+            if (currentTool === 'pen' || currentTool === 'eraser') {
+                dCtx.globalCompositeOperation = (currentTool === 'eraser') ? 'destination-out' : 'source-over';
+                const dist = Math.sqrt(Math.pow(px-lastPos.x,2)+Math.pow(py-lastPos.y,2));
+                dCtx.strokeStyle = currentColor; dCtx.lineWidth = (currentTool === 'eraser') ? 40 : Math.max(2, 10 - (dist/4));
+                dCtx.lineTo(px, py); dCtx.stroke(); dCtx.beginPath(); dCtx.moveTo(px, py);
+                if (currentTool === 'pen' && dist > 3) {
+                    for(let i=0; i<6; i++) {
+                        particles.push({
+                            x: px, y: py,
+                            vx: (Math.random()-0.5)*3, vy: Math.random()*2+1,
+                            size: Math.random()*4+2,
+                            // Ultra Sparkle: Randomly mix white/silver in with the color
+                            color: Math.random() > 0.7 ? '#ffffff' : currentColor,
+                            alpha: 1, rot: Math.random()*Math.PI,
+                            twinkle: Math.random() * 0.1 // speed of flicker
+                        });
+                    }
+                }
+                lastPos = {x:px, y:py};
+            }
+        });
+
+        dCanvas.addEventListener('pointerdown', (e) => {
+            isPointerDown = true;
+            const x = (currentTool === 'pen' || currentTool === 'eraser') ? e.clientX : getSnap(e.clientX);
+            const y = (currentTool === 'pen' || currentTool === 'eraser') ? e.clientY : getSnap(e.clientY, true);
+            lastPos = { x: e.clientX, y: e.clientY };
+            if (currentTool === 'stamp') {
+                dCtx.font = "35px serif"; dCtx.textAlign = "center"; dCtx.textBaseline = "middle";
+                dCtx.fillText(activeStamp, x, y);
+            } else { dCtx.beginPath(); dCtx.moveTo(x, y); }
+        });
+
+        window.addEventListener('pointerup', () => isPointerDown = false);
+
+        function animate() {
+            glCtx.clearRect(0,0,glitterCanvas.width, glitterCanvas.height);
+            glCtx.shadowBlur = 10; // GLOBAL BLOOM
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i]; p.x += p.vx; p.y += p.vy; p.alpha -= 0.01;
+                let flicker = p.alpha * (0.5 + Math.abs(Math.sin(Date.now() * p.twinkle))); // TWINKLE LOGIC
+                if(p.alpha <= 0) { particles.splice(i,1); continue; }
+                glCtx.save();
+                glCtx.globalAlpha = flicker;
+                glCtx.shadowColor = p.color;
+                glCtx.translate(p.x, p.y); glCtx.rotate(p.rot);
+                glCtx.fillStyle = p.color;
+                glCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size);
+                // Extra diamond shine
+                glCtx.fillStyle = 'white'; glCtx.fillRect(-p.size/4, -p.size/4, p.size/2, p.size/2);
+                glCtx.restore();
+            }
+            requestAnimationFrame(animate);
+        }
+
+        function celebrate() { confetti({ particleCount: 200, spread: 90, origin: { y: 0.7 }, colors: [currentColor, '#ffffff', '#ffd700'] }); }
+        function clearAll() { dCtx.clearRect(0,0,dCanvas.width,dCanvas.height); particles = []; }
+        window.addEventListener('resize', resize);
+        resize(); animate(); setTool('pen');
+    </script>
+</body>
+</html>

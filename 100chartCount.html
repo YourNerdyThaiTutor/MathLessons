@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Voice Skip Counting</title>
+    <style>
+        :root {
+            --bg: #f0f4f8;
+            --primary: #4361ee;
+            --glow: #4cc9f0;
+            --highlight: #f72585;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+        }
+
+        .btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 15px 0; }
+        
+        .count-btn {
+            border: 2px solid #e2e8f0;
+            background: white;
+            padding: 10px 15px;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .count-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        #start-btn {
+            background: #2ecc71;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.4);
+        }
+
+        #start-btn:disabled { background: #bdc3c7; box-shadow: none; }
+
+        /* The Grid */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 5px;
+            background: white;
+            padding: 10px;
+            border-radius: 15px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            border-radius: 6px;
+            color: #94a3b8;
+            font-weight: 600;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .cell.highlight { background: #fdf2f8; color: var(--highlight); border-color: #fbcfe8; }
+
+        /* THE NEON GLOW TRACER */
+        .cell.current-voice {
+            border-color: var(--glow) !important;
+            box-shadow: 0 0 15px var(--glow), inset 0 0 10px var(--glow);
+            transform: scale(1.15);
+            z-index: 10;
+            color: var(--primary);
+            background: white;
+        }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <h2>Select Interval</h2>
+    <div class="btn-group" id="intervals"></div>
+    <button id="start-btn" onclick="startCounting()">START COUNTING 🔊</button>
+</div>
+
+<div class="chart-grid" id="grid"></div>
+
+<script>
+    const grid = document.getElementById('grid');
+    const intervalContainer = document.getElementById('intervals');
+    let selectedInterval = 2;
+    let isCounting = false;
+
+    // Build Chart
+    for (let i = 1; i <= 100; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.id = `c-${i}`;
+        cell.innerText = i;
+        grid.appendChild(cell);
+    }
+
+    // Build Buttons
+    for (let i = 2; i <= 12; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'count-btn' + (i === 2 ? ' active' : '');
+        btn.innerText = i;
+        btn.onclick = () => selectInterval(i, btn);
+        intervalContainer.appendChild(btn);
+    }
+
+    function selectInterval(val, btn) {
+        if (isCounting) return;
+        selectedInterval = val;
+        document.querySelectorAll('.count-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        
+        // Visual preview
+        document.querySelectorAll('.cell').forEach(c => {
+            const num = parseInt(c.innerText);
+            c.className = 'cell' + (num % val === 0 ? ' highlight' : '');
+        });
+    }
+
+    async function startCounting() {
+        if (isCounting) return;
+        isCounting = true;
+        document.getElementById('start-btn').disabled = true;
+
+        for (let i = selectedInterval; i <= 100; i += selectedInterval) {
+            if (!isCounting) break;
+
+            const cell = document.getElementById(`c-${i}`);
+            cell.classList.add('current-voice');
+            
+            await speak(i);
+            
+            cell.classList.remove('current-voice');
+        }
+
+        isCounting = false;
+        document.getElementById('start-btn').disabled = false;
+    }
+
+    function speak(num) {
+        return new Promise((resolve) => {
+            const utterance = new SpeechSynthesisUtterance(num.toString());
+            utterance.rate = 0.9; // Slightly slower for kids
+            utterance.pitch = 1.2; // Friendlier tone
+            utterance.onend = resolve;
+            window.speechSynthesis.speak(utterance);
+        });
+    }
+
+    // Initial Highlight for 2s
+    selectInterval(2, document.querySelector('.count-btn'));
+</script>
+
+</body>
+</html>

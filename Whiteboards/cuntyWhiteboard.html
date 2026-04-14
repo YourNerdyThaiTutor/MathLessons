@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stamps, Shift, & Sparkles</title>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; overflow: hidden; background: #eeb4dd; font-family: system-ui, sans-serif; }
+        canvas { position: absolute; top: 0; left: 0; }
+        #gridCanvas { z-index: 1; pointer-events: none; opacity: 0.5; }
+        #drawCanvas { z-index: 2; touch-action: none; cursor: crosshair; }
+        #tempCanvas { z-index: 3; pointer-events: none; }
+        #glitterCanvas { z-index: 4; pointer-events: none; }
+
+        /* Unified Control Panel */
+        .control-panel {
+            position: absolute; top: 15px; left: 15px; z-index: 100;
+            background: rgba(255,255,255,0.95); padding: 15px; border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1); width: 210px; border: 1px solid #ddd;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        label { font-size: 10px; font-weight: 900; color: #444; text-transform: uppercase; }
+        input[type=range] { width: 100%; accent-color: #000; margin-bottom: 5px; }
+        
+        .stamp-selector { display: flex; gap: 5px; margin-top: 5px; }
+        .stamp-option { 
+            width: 30px; height: 30px; border: 1px solid #ddd; border-radius: 5px;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; background: white;
+        }
+        .stamp-option.active { border-color: #000; background: #eee; }
+
+        /* Toolbar */
+        .toolbar {
+            position: absolute; bottom: 25px; left: 50%; transform: translateX(-50%);
+            display: flex; align-items: center; gap: 12px; padding: 12px 25px;
+            background: white; border-radius: 50px; box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            z-index: 100; border: 1px solid #eee;
+        }
+        .tool-btn { 
+            width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; 
+            border-radius: 50%; cursor: pointer; font-size: 1.3rem; background: #f5f5f5; transition: 0.2s;
+        }
+        .tool-btn.active { background: #000; color: #fff; transform: scale(1.1); }
+        .color-swatch { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; }
+        .color-active { border-color: black !important; transform: scale(1.2); }
+        .btn-serve { background: #000; color: #fff; border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <div class="control-panel">
+        <label>Grid Mode</label>
+        <select id="gridMode" onchange="updateGrid()" style="width:100%; margin-bottom:10px;">
+            <option value="center">4 Quadrants (+/-)</option>
+            <option value="corner">1st Quadrant (+)</option>
+            <option value="none">Blank</option>
+        </select>
+        
+        <label>Zoom</label>
+        <input type="range" id="gridScale" min="30" max="150" value="70" oninput="updateGrid()">
+        
+        <label>Shift X & Y</label>
+        <input type="range" id="xShift" min="-400" max="400" value="0" oninput="updateGrid()">
+        <input type="range" id="yShift" min="-400" max="400" value="0" oninput="updateGrid()">
+
+        <label id="stampLabel" style="display:none;">Select Stamp</label>
+        <div class="stamp-selector" id="stampBox" style="display:none;">
+            <div class="stamp-option active" onclick="setStamp('⭐', this)">⭐</div>
+            <div class="stamp-option" onclick="setStamp('💎', this)">💎</div>
+            <div class="stamp-option" onclick="setStamp('💅', this)">💅</div>
+            <div class="stamp-option" onclick="setStamp('🔥', this)">🔥</div>
+        </div>
+    </div>
+
+    <canvas id="gridCanvas"></canvas>
+    <canvas id="drawCanvas"></canvas>
+    <canvas id="tempCanvas"></canvas>
+    <canvas id="glitterCanvas"></canvas>
+
+    <div class="toolbar">
+        <div id="pen" class="tool-btn active" onclick="setTool('pen')">✨</div>
+        <div id="stamp" class="tool-btn" onclick="setTool('stamp')">⭐</div>
+        <div id="rect" class="tool-btn" onclick="setTool('rect')">⬜</div>
+        <div id="circle" class="tool-btn" onclick="setTool('circle')">⭕</div>
+        <div id="line" class="tool-btn" onclick="setTool('line')">📏</div>
+        <div id="eraser" class="tool-btn" onclick="setTool('eraser')">🧽</div>
+        <div style="width:1px; height:30px; background:#eee;"></div>
+        <div class="color-swatch color-active" style="background:#000" onclick="setColor('#000', this)"></div>
+        <div class="color-swatch" style="background:#D4AF37" onclick="setColor('#D4AF37', this)"></div>
+        <div class="color-swatch" style="background:#ff0077" onclick="setColor('#ff0077', this)"></div>
+        <button style="background:#eee; border:none; padding:8px 12px; border-radius:10px; cursor:pointer;" onclick="clearAll()">Clear</button>
+        <button class="btn-serve" onclick="celebrate()">SERVE</button>
+    </div>
+
+    <script>
+        const dCanvas = document.getElementById('drawCanvas');
+        const dCtx = dCanvas.getContext('2d');
+        const gCanvas = document.getElementById('gridCanvas');
+        const gCtx = gCanvas.getContext('2d');
+        const tCanvas = document.getElementById('tempCanvas');
+        const tCtx = tCanvas.getContext('2d');
+        const glitterCanvas = document.getElementById('glitterCanvas');
+        const glCtx = glitterCanvas.getContext('2d');
+
+        let isPointerDown = false;
+        let currentTool = 'pen';
+        let currentColor = '#000';
+        let activeStamp = '⭐';
+        let startPos = null;
+        let origin = { x: 0, y: 0 };
+        let particles = [];
+        let lastPos = {x:0, y:0};
+
+        function resize() {
+            dCanvas.width = gCanvas.width = tCanvas.width = glitterCanvas.width = window.innerWidth;
+            dCanvas.height = gCanvas.height = tCanvas.height = glitterCanvas.height = window.innerHeight;
+            updateGrid();
+            [dCtx, tCtx].forEach(ctx => { ctx.lineCap = 'round'; ctx.lineJoin = 'round'; });
+        }
+
+        function updateGrid() {
+            const mode = document.getElementById('gridMode').value;
+            const scale = parseInt(document.getElementById('gridScale').value);
+            const xS = parseInt(document.getElementById('xShift').value);
+            const yS = parseInt(document.getElementById('yShift').value);
+
+            gCtx.clearRect(0, 0, gCanvas.width, gCanvas.height);
+            if (mode === 'none') return;
+
+            origin.x = (mode === 'center' ? gCanvas.width/2 : 60) + xS;
+            origin.y = (mode === 'center' ? gCanvas.height/2 : gCanvas.height-60) + yS;
+
+            gCtx.strokeStyle = '#ddd'; gCtx.lineWidth = 1;
+            gCtx.font = "10px sans-serif"; gCtx.fillStyle = "#999";
+
+            for(let x = origin.x; x < gCanvas.width; x += scale) { gCtx.strokeRect(x, 0, 0.1, gCanvas.height); if(x!==origin.x) gCtx.fillText(Math.round((x-origin.x)/scale), x+4, origin.y+12); }
+            for(let x = origin.x - scale; x > 0; x -= scale) { gCtx.strokeRect(x, 0, 0.1, gCanvas.height); gCtx.fillText(Math.round((x-origin.x)/scale), x+4, origin.y+12); }
+            for(let y = origin.y; y < gCanvas.height; y += scale) { gCtx.strokeRect(0, y, gCanvas.width, 0.1); if(y!==origin.y) gCtx.fillText(Math.round((origin.y-y)/scale), origin.x+4, y-4); }
+            for(let y = origin.y - scale; y > 0; y -= scale) { gCtx.strokeRect(0, y, gCanvas.width, 0.1); gCtx.fillText(Math.round((origin.y-y)/scale), origin.x+4, y-4); }
+
+            gCtx.strokeStyle = '#000'; gCtx.lineWidth = 2;
+            gCtx.beginPath(); gCtx.moveTo(origin.x, 0); gCtx.lineTo(origin.x, gCanvas.height); gCtx.stroke();
+            gCtx.beginPath(); gCtx.moveTo(0, origin.y); gCtx.lineTo(gCanvas.width, origin.y); gCtx.stroke();
+        }
+
+        function getSnap(coord, isY = false) {
+            const s = parseInt(document.getElementById('gridScale').value);
+            const off = isY ? origin.y : origin.x;
+            return Math.round((coord - off) / s) * s + off;
+        }
+
+        function setTool(t) { 
+            currentTool = t; 
+            document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(t).classList.add('active');
+            document.getElementById('stampBox').style.display = (t === 'stamp') ? 'flex' : 'none';
+            document.getElementById('stampLabel').style.display = (t === 'stamp') ? 'block' : 'none';
+        }
+
+        function setStamp(s, el) {
+            activeStamp = s;
+            document.querySelectorAll('.stamp-option').forEach(o => o.classList.remove('active'));
+            el.classList.add('active');
+        }
+
+        function setColor(c, el) { 
+            currentColor = c; 
+            document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('color-active'));
+            el.classList.add('color-active');
+        }
+
+        dCanvas.addEventListener('pointerdown', (e) => {
+            isPointerDown = true;
+            const x = (currentTool === 'pen' || currentTool === 'eraser') ? e.clientX : getSnap(e.clientX);
+            const y = (currentTool === 'pen' || currentTool === 'eraser') ? e.clientY : getSnap(e.clientY, true);
+            startPos = { x, y };
+            lastPos = { x: e.clientX, y: e.clientY };
+
+            if (currentTool === 'stamp') {
+                dCtx.font = "30px serif";
+                dCtx.textAlign = "center";
+                dCtx.textBaseline = "middle";
+                dCtx.fillText(activeStamp, x, y);
+            } else if (currentTool === 'pen' || currentTool === 'eraser') {
+                dCtx.beginPath(); dCtx.moveTo(x, y);
+            }
+        });
+
+        dCanvas.addEventListener('pointermove', (e) => {
+            if (!isPointerDown) return;
+            const x = e.clientX, y = e.clientY;
+
+            if (currentTool === 'pen' || currentTool === 'eraser') {
+                dCtx.globalCompositeOperation = (currentTool === 'eraser') ? 'destination-out' : 'source-over';
+                const dist = Math.sqrt(Math.pow(x-lastPos.x,2)+Math.pow(y-lastPos.y,2));
+                dCtx.strokeStyle = currentColor;
+                dCtx.lineWidth = (currentTool === 'eraser') ? 40 : Math.max(1, 6 - (dist/8));
+                dCtx.lineTo(x, y); dCtx.stroke(); dCtx.beginPath(); dCtx.moveTo(x, y);
+
+                if (currentTool === 'pen' && dist > 4) {
+                    for(let i=0; i<4; i++) particles.push({ x, y, vx: (Math.random()-0.5)*2, vy: Math.random()*2+1, size: Math.random()*3+1, color: currentColor, alpha: 1, rot: Math.random()*6 });
+                }
+                lastPos = {x, y};
+            } else if (currentTool !== 'stamp') {
+                tCtx.clearRect(0,0,tCanvas.width,tCanvas.height);
+                const sE = {x: getSnap(x), y: getSnap(y, true)};
+                tCtx.strokeStyle = currentColor; tCtx.lineWidth = 3; tCtx.beginPath();
+                if(currentTool === 'rect') tCtx.strokeRect(startPos.x, startPos.y, sE.x-startPos.x, sE.y-startPos.y);
+                if(currentTool === 'circle') { let r = Math.sqrt(Math.pow(sE.x-startPos.x,2)+Math.pow(sE.y-startPos.y,2)); tCtx.arc(startPos.x, startPos.y, r, 0, Math.PI*2); tCtx.stroke(); }
+                if(currentTool === 'line') { tCtx.moveTo(startPos.x, startPos.y); tCtx.lineTo(sE.x, sE.y); tCtx.stroke(); }
+            }
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            if (!isPointerDown) return;
+            if (['rect', 'circle', 'line'].includes(currentTool)) {
+                const sE = {x: getSnap(e.clientX), y: getSnap(e.clientY, true)};
+                dCtx.strokeStyle = currentColor; dCtx.lineWidth = 3; dCtx.beginPath();
+                if(currentTool === 'rect') dCtx.strokeRect(startPos.x, startPos.y, sE.x-startPos.x, sE.y-startPos.y);
+                if(currentTool === 'circle') { let r = Math.sqrt(Math.pow(sE.x-startPos.x,2)+Math.pow(sE.y-startPos.y,2)); dCtx.arc(startPos.x, startPos.y, r, 0, Math.PI*2); dCtx.stroke(); }
+                if(currentTool === 'line') { dCtx.moveTo(startPos.x, startPos.y); dCtx.lineTo(sE.x, sE.y); dCtx.stroke(); }
+                tCtx.clearRect(0,0,tCanvas.width,tCanvas.height);
+            }
+            isPointerDown = false;
+        });
+
+        function animate() {
+            glCtx.clearRect(0,0,glitterCanvas.width, glitterCanvas.height);
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i]; p.x += p.vx; p.y += p.vy; p.alpha -= 0.015;
+                if(p.alpha <= 0) { particles.splice(i,1); continue; }
+                glCtx.save(); glCtx.globalAlpha = p.alpha; glCtx.translate(p.x, p.y); glCtx.rotate(p.rot);
+                glCtx.fillStyle = p.color; glCtx.fillRect(-p.size/2, -p.size/2, p.size, p.size*1.5); glCtx.restore();
+            }
+            requestAnimationFrame(animate);
+        }
+
+        function celebrate() { confetti({ particleCount: 150, spread: 70, origin: { y: 0.7 }, colors: ['#D4AF37', '#000', '#ff0077'] }); }
+        function clearAll() { dCtx.clearRect(0,0,dCanvas.width,dCanvas.height); particles = []; }
+        window.addEventListener('resize', resize);
+        resize(); animate();
+        window.addEventListener('keydown', e => { if(e.key.toLowerCase()==='p') celebrate(); });
+        window.addEventListener('keydown', e => { if(e.key.toLowerCase()==='c') clearAll(); });
+    </script>
+</body>
+</html>

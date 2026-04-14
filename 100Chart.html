@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Skip Counting Explorer</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --primary: #4361ee;
+            --highlight: #f72585;
+            --text: #1e293b;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
+
+        h1 { color: var(--primary); margin: 0 0 15px 0; font-size: 1.5rem; }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .count-btn {
+            border: 2px solid #e2e8f0;
+            background: white;
+            padding: 12px 18px;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text);
+            font-size: 1rem;
+        }
+
+        .count-btn:hover { background: #f1f5f9; border-color: var(--primary); }
+        .count-btn.active {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            transform: scale(1.05);
+        }
+
+        /* The 100 Chart Grid */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 6px;
+            background: white;
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+
+        .number-cell {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f8fafc;
+            border-radius: 8px;
+            font-weight: 600;
+            color: #94a3b8;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            font-size: 1.1rem;
+            border: 1px solid #f1f5f9;
+        }
+
+        /* Highlight States */
+        .number-cell.highlighted {
+            background: var(--highlight);
+            color: white;
+            transform: scale(1.1);
+            box-shadow: 0 4px 12px rgba(247, 37, 133, 0.3);
+            z-index: 2;
+        }
+
+        .number-cell.faded {
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <h1>Skip Count By...</h1>
+    <div class="button-group" id="btn-container">
+        </div>
+</div>
+
+<div class="chart-grid" id="chart">
+    </div>
+
+<script>
+    const chart = document.getElementById('chart');
+    const btnContainer = document.getElementById('btn-container');
+    let activeInterval = null;
+
+    // 1. Create the 100 cells
+    for (let i = 1; i <= 100; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'number-cell';
+        cell.id = `n-${i}`;
+        cell.innerText = i;
+        chart.appendChild(cell);
+    }
+
+    // 2. Create buttons for 2 through 12
+    for (let i = 2; i <= 12; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'count-btn';
+        btn.innerText = i;
+        btn.onclick = () => highlightStep(i, btn);
+        btnContainer.appendChild(btn);
+    }
+
+    function highlightStep(step, clickedBtn) {
+        // Clear previous styles
+        document.querySelectorAll('.number-cell').forEach(cell => {
+            cell.classList.remove('highlighted', 'faded');
+        });
+        document.querySelectorAll('.count-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+
+        // Toggle logic: if clicking same button, just clear
+        if (activeInterval === step) {
+            activeInterval = null;
+            return;
+        }
+
+        activeInterval = step;
+        clickedBtn.classList.add('active');
+
+        // Apply new highlights
+        for (let i = 1; i <= 100; i++) {
+            const cell = document.getElementById(`n-${i}`);
+            if (i % step === 0) {
+                cell.classList.add('highlighted');
+            } else {
+                cell.classList.add('faded');
+            }
+        }
+    }
+</script>
+
+</body>
+</html>
