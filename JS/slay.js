@@ -1,2 +1,2 @@
-function celebrate() { confetti({ particleCount: 300, spread: 100, origin: { y: 0.7 }, colors: ['#92ff83', '#00f2ff','#FAFF75', '#ffffff'] }); }
+function celebrate() { confetti({ particleCount: 300, spread: 100, origin: { y: 0.7 }, colors: ['#ff0077','#92ff83', '#00f2ff','#FAFF75', '#ffffff'] }); }
 window.addEventListener('keydown', e => { if(e.key.toLowerCase()==='p') celebrate(); });
