@@ -226,7 +226,7 @@
             requestAnimationFrame(animate);
         }
 
-        function celebrate() { confetti({ particleCount: 200, spread: 90, origin: { y: 0.7 }, colors: [currentColor, '#ffffff', '#ffd700'] }); }
+        
         function clearAll() { dCtx.clearRect(0,0,dCanvas.width,dCanvas.height); particles = []; }
         window.addEventListener('resize', resize);
         resize(); animate(); setTool('pen');
