@@ -161,6 +161,7 @@
         <div id="circle" class="tool-btn" onclick="setTool('circle')">⭕</div>
         <div id="line" class="tool-btn" onclick="setTool('line')">📏</div>
         <div id="eraser" class="tool-btn" onclick="setTool('eraser')">🧽</div>
+        <input type="range" id="penSize" min="1" max="20" value="4" style="width:80px">
         <div style="width:1px; height:30px; background:#eee;"></div>
         <div class="color-swatch color-active" style="background:#ff0077" onclick="setColor('#ff0077', this)"></div>
         <div class="color-swatch" style="background:#000" onclick="setColor('#000', this)"></div>
@@ -270,6 +271,7 @@
                 dCtx.globalCompositeOperation = (currentTool === 'eraser') ? 'destination-out' : 'source-over';
                 const dist = Math.sqrt(Math.pow(px-lastPos.x,2)+Math.pow(py-lastPos.y,2));
                 dCtx.strokeStyle = currentColor; dCtx.lineWidth = (currentTool === 'eraser') ? 40 : Math.max(2, 10 - (dist/4));
+                dCtx.lineWidth = document.getElementById('penSize').value;
                 dCtx.lineTo(px, py); dCtx.stroke(); dCtx.beginPath(); dCtx.moveTo(px, py);
                 if (currentTool === 'pen' && dist > 3) {
                     for(let i=0; i<6; i++) {
@@ -336,7 +338,7 @@
         }
         function clearAll() { dCtx.clearRect(0,0,dCanvas.width,dCanvas.height); particles = []; }
 
-        function celebrate() { confetti({ particleCount: 300, spread: 100, origin: { y: 0.7 }, colors: [currentColor, '#000', '#00f2ff','#FAFF75', '#ffffff'] }); }
+        function celebrate() { confetti({ particleCount: 300, spread: 100, origin: { y: 0.7 }, colors: [currentColor, '#92ff83', '#00f2ff','#FAFF75', '#ffffff'] }); }
         window.addEventListener('resize', resize);
         resize(); animate(); setTool('pen');
         window.addEventListener('keydown', e => { if(e.key.toLowerCase()==='p') celebrate(); });
