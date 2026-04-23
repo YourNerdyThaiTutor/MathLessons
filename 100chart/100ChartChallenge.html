@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Math Explorer: Scrollable Edition</title>
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --primary: #4361ee;
+            --glow: #4cc9f0;
+            --correct: #2ecc71;
+            --wrong: #e74c3c;
+        }
+
+        /* FIXED: Removed overflow: hidden so you can scroll! */
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+            user-select: none;
+            min-height: 100vh; /* Ensures background covers the whole screen */
+            overflow-y: auto;  /* Explicitly allow vertical scrolling */
+            scroll-behavior: smooth;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            width: 100%;
+            max-width: 600px;
+            text-align: center;
+            flex-shrink: 0; /* Prevents the header from squishing */
+        }
+
+        .btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 15px 0; }
+        
+        .count-btn {
+            border: 2px solid #e2e8f0;
+            background: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1.1rem;
+        }
+
+        .count-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* The Grid */
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(10, 1fr);
+            gap: 8px;
+            background: white;
+            padding: 15px;
+            border-radius: 20px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 40px; /* Space at the bottom so it doesn't touch the edge */
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #f1f5f9;
+            border-radius: 10px;
+            color: #94a3b8;
+            font-weight: 700;
+            font-size: 1.2rem;
+            border: 2px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .cell.target-glow {
+            border-color: var(--glow);
+            box-shadow: 0 0 20px var(--glow);
+            color: var(--primary);
+            background: white;
+            transform: scale(1.05);
+            z-index: 5;
+        }
+
+        .cell.found {
+            background: white;
+            color: var(--correct);
+            border-color: var(--correct);
+        }
+
+        /* Floating Text remains fixed so it doesn't scroll away instantly */
+        .cheer-text {
+            position: fixed;
+            color: var(--correct);
+            font-weight: 800;
+            font-size: 2.5rem;
+            pointer-events: none;
+            z-index: 100;
+            animation: floatUp 1.5s ease-out forwards;
+            text-shadow: 2px 2px 10px rgba(0,0,0,0.1);
+        }
+
+        @keyframes floatUp {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -250%) scale(1.5); opacity: 0; }
+        }
+
+        #goal-text {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="controls">
+    <div id="goal-text">Find the next number!</div>
+    <div class="btn-group" id="intervals"></div>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span id="voice-status" style="font-size: 0.8rem; color: #94a3b8;">Voice ready...</span>
+        <button onclick="showHint()" style="background: #f1f5f9; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: bold;">Hint</button>
+        <button onclick="resetGame()" style="background: #f1f5f9; border: none; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: bold;">Reset</button>
+    </div>
+</div>
+
+<div class="chart-grid" id="grid"></div>
+
+<script>
+    const grid = document.getElementById('grid');
+    const intervalContainer = document.getElementById('intervals');
+    let selectedInterval = 2;
+    let nextTarget = 2;
+    let streakCount = 0;
+    let femaleVoice = null;
+
+    const cheers = ["AMAZING! ⭐", "YOU GOT IT! 🎈", "GREAT! ✨", "NICE JOB! ✅", "BOOM! 🚀", "JACKPOT! 💎", "COOL", "WOW", "FANTASTIC", "YAY!!"];
+
+    function loadVoices() {
+        const voices = window.speechSynthesis.getVoices();
+        femaleVoice = voices.find(v => 
+            v.name.includes('Samantha') || 
+            v.name.includes('Victoria') || 
+            v.name.includes('Google') && v.name.includes('Female')
+        ) || voices[0];
+    }
+
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+    loadVoices();
+
+    for (let i = 1; i <= 100; i++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.id = `c-${i}`;
+        cell.innerText = i;
+        cell.onclick = (e) => handleTap(i, e);
+        grid.appendChild(cell);
+    }
+
+    for (let i = 2; i <= 12; i++) {
+        const btn = document.createElement('button');
+        btn.className = 'count-btn' + (i === 2 ? ' active' : '');
+        btn.innerText = i;
+        btn.onclick = () => {
+            selectedInterval = i;
+            document.querySelectorAll('.count-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            resetGame();
+        };
+        intervalContainer.appendChild(btn);
+    }
+
+    // ... (Keep loadVoices and speak functions same as before) ...
+
+    function resetGame() {
+        nextTarget = selectedInterval;
+        streakCount = 0;
+        document.querySelectorAll('.cell').forEach(c => {
+            c.className = 'cell';
+            c.style.boxShadow = 'none'; // Ensure no lingering glows
+        });
+        updateHeader();
+    }
+
+    function updateHeader() {
+        document.getElementById('goal-text').innerText = `Count by ${selectedInterval}s | Streak: ${streakCount}`;
+    }
+
+    function handleTap(num, event) {
+        if (num === nextTarget) {
+            const cell = document.getElementById(`c-${num}`);
+            cell.classList.add('found');
+            streakCount++;
+            triggerPopupCheer(event.clientX, event.clientY);
+            speak(num);
+            nextTarget += selectedInterval;
+            
+            if (nextTarget > 100) {
+                document.getElementById('goal-text').innerText = "🏆 CHAMPION! 🏆";
+            } else {
+                updateHeader();
+            }
+        } else {
+            // Wrong answer logic
+            const cell = document.getElementById(`c-${num}`);
+            cell.classList.add('shake');
+            setTimeout(() => cell.classList.remove('shake'), 400);
+            streakCount = 0; // Penalty: Lose the streak
+            updateHeader();
+        }
+    }
+
+    // New Hint Function
+    function showHint() {
+        const targetCell = document.getElementById(`c-${nextTarget}`);
+        targetCell.classList.add('target-glow');
+        setTimeout(() => targetCell.classList.remove('target-glow'), 1000);
+    }
+
+    // Update interval buttons to include a "Hint" button in the UI
+    // Add <button onclick="showHint()">Hint</button> to your HTML controls
+
+
+    function triggerPopupCheer(x, y) {
+        const cheerText = document.createElement('div');
+        cheerText.className = 'cheer-text';
+        cheerText.innerText = cheers[Math.floor(Math.random() * cheers.length)];
+        cheerText.style.left = `${x}px`;
+        cheerText.style.top = `${y}px`;
+        document.body.appendChild(cheerText);
+        setTimeout(() => cheerText.remove(), 1500);
+    }
+
+    function speak(num) {
+        const utterance = new SpeechSynthesisUtterance(num.toString());
+        if (femaleVoice) utterance.voice = femaleVoice;
+        utterance.rate = 1.1;
+        utterance.pitch = 1.2;
+        window.speechSynthesis.cancel();
+        window.speechSynthesis.speak(utterance);
+    }
+
+    updateTargetGlow();
+</script>
+
+</body>
+</html>
